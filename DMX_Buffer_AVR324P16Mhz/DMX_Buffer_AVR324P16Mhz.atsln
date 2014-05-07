@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Atmel Studio Solution File, Format Version 11.00
+Project("{54F91283-7BC4-4236-8FF9-10F437C3AD48}") = "DMX_Buffer_AVR324P16Mhz", "DMX_Buffer_AVR324P16Mhz\DMX_Buffer_AVR324P16Mhz.cproj", "{A57D778F-B9C2-40FF-B50D-EB9FD18077D0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|AVR = Debug|AVR
+		Release|AVR = Release|AVR
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A57D778F-B9C2-40FF-B50D-EB9FD18077D0}.Debug|AVR.ActiveCfg = Debug|AVR
+		{A57D778F-B9C2-40FF-B50D-EB9FD18077D0}.Debug|AVR.Build.0 = Debug|AVR
+		{A57D778F-B9C2-40FF-B50D-EB9FD18077D0}.Release|AVR.ActiveCfg = Release|AVR
+		{A57D778F-B9C2-40FF-B50D-EB9FD18077D0}.Release|AVR.Build.0 = Release|AVR
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
