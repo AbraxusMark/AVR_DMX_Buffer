@@ -5,7 +5,6 @@
  *
  */
 
-
 #include <asf.h>
 #include <util\delay.h>
 #include <util\atomic.h>
@@ -19,31 +18,29 @@
 #define F_CPU 16000000L			//16Mhz crystal used for baud rate 0.0% error
 #define DMX_FULL_Scale 3		//=(F_CPU)/(16*Baudrate).. For 16Mhz crystal and 250000bps => 3
 // #define DMX_BREAK_Scale 9
-#define LED_PORT	PORTB			//Port where the LED's are located .. Duh! :P
-#define LED_DDR		DDRB			//Data Direction Register of the LED's..
-#define DMX_ADDRESS_DDR		DDRA	//DDR where the "usual" Dipswitch is on for the channel setting
-#define DMX_ADDRESS_PORT	PORTA	//Port with the "usual" Dipswitch for the channel setting
-#define DMX_ADDRESS_PIN		PINA	//Pins where the "usual" Dipswitch for the channel setting
-#define DMXFRAME 512 
-#define NOP()   __asm__ __volatile__ ("nop" ::)
+#define LED_PORT	PORTB			//Port where the LED's are located
+#define LED_DDR		DDRB			//Data Direction Register of the LEDs
+#define DMX_ADDRESS_DDR		DDRA	//DDR where the Dipswitch is on for the channel setting
+#define DMX_ADDRESS_PORT	PORTA	//Port with the Dipswitch for the channel setting
+#define DMX_ADDRESS_PIN		PINA	//Pins where the Dipswitch for the channel setting
 #define DMXTXPIN	PIND3		
-
 
 //DMX Params
 
-#define BREAKTIME 170
-#define MABTIME 9
-#define STARTTIME 40
-#define MBSTIME 30
-#define MBBTIME 150
+#define BREAKTIME 176
+#define MABTIME 12
+//#define STARTTIME 40
+#define MBSTIME 12
+#define MBBTIME 1000
 
 //Functions
-void Init_Ports();	//Initialize IO Pins
-void TransmitDMXFrame();
+void Init_Ports(void);	//Initialize IO Pins
+void TransmitDMXFrame(void);
+int main(void);
 
 //Variables
 
-volatile unsigned int  vintDMX_ChCounter;							//For counting the data packets
+volatile unsigned int  vintDMX_ChCounter, vintGoodFrame = 1;							//For counting the data packets
 volatile unsigned char vDMXPacket[514];								// 0 index is start ?
 volatile unsigned int vdiv;
 
@@ -61,7 +58,7 @@ int main(){
 																			
 	wdt_disable();								//Disable the Watchdog so the controller won't reset on infinite loops.							
 	
-	for(i=0;i<513;i++){
+	for(i=0;i<514;i++){
 		vDMXPacket[i] = 0x00;
 	}
 	sei();										//Enable all interrupts
@@ -71,40 +68,37 @@ int main(){
 		
 		vucButtonStates = PINA;
 		//PORTB = vucButtonStates;
-		vintStartAddress = (int)~vucButtonStates;
-				
+		vintStartAddress = (int)~vucButtonStates *3;
+		
 		_delay_us(BREAKTIME);						//BREAK
 		
-		// MARK AFTER BREAK
-		PORTD |= (1<<DMXTXPIN);
-										PORTD |= (1<<PIND6);	//************ DEBUG cycle gen
-		_delay_us(MABTIME);
-		//PORTD &= ~(1<<DMXTXPIN);
-		//_delay_us(STARTTIME);
-		PORTD |= (1<<DMXTXPIN);
-		// PACKET
-		UCSR1A = (1<<TXC1);
 
-		for(i=0;i<513;i++){		
-			UCSR1B |= (1<<TXEN1);
-			while(!(UCSR1A & (1 << UDRE1))) ;
-			UDR1 = vDMXPacket[i];
-								
-			while (!(UCSR1A & (1<<TXC1)));
-			UCSR1B &= ~(1<<TXEN1);	
-		
-			_delay_us(MBSTIME);		//SLOT delay
-		}	
-					//uart tx off for rest of timings
-	
-		//MARK BEFORE BREAK	
-		PORTD |= (1<<DMXTXPIN);
-		_delay_us(MBBTIME);
-		PORTD &= ~(1<<DMXTXPIN);
-										PORTD &= ~(1<<PIND6);	//************ DEBUG cycle gen
-		PORTB ^= (1<<PINB6);						//LED status
+			// MARK AFTER BREAK
+			PORTD |= (1<<DMXTXPIN);
+											PORTD |= (1<<PIND6);	//************ DEBUG cycle gen
+			_delay_us(MABTIME);
+			//PORTD &= ~(1<<DMXTXPIN);  
+			//_delay_us(STARTTIME);
+			 //PORTD |= (1<<DMXTXPIN);
 			
-
+			UCSR1A = (1<<TXC1);
+			UCSR1B |= (1<<TXEN1);
+			for(i=0;i<514;i++){		// PACKET
+								
+				while(!(UCSR1A & (1 << UDRE1))) ;
+				UDR1 = vDMXPacket[i];
+									
+				//_delay_us(MBSTIME);		//SLOT delay
+			}	
+				while (!(UCSR1A & (1<<UDRE1)));
+				UCSR1B &= ~(1<<TXEN1);		//uart tx off for rest of timings
+	
+			//MARK BEFORE BREAK	
+			PORTD |= (1<<DMXTXPIN);
+			_delay_us(MBBTIME);
+			PORTD &= ~(1<<DMXTXPIN);
+									PORTD &= ~(1<<PIND6);	//************ DEBUG cycle gen
+			PORTB ^= (1<<PINB6);						//LED status	
 	}
 	
 	return 0;
@@ -132,22 +126,23 @@ ISR(USART0_RX_vect){							//UART 0 ISR
 	unsigned char DMX_Data = UDR0;							//Read data from UDR data register
 
 	if (UART_Status & (1<<FE0)){				//If we detect a frame error=> RX_line low for longer then 8 bits (Break condition)
-		vuchrDMX_Break=1;						//We have a break.
+		//vuchrDMX_Break=1;						//We have a break.
 		vintDMX_ChCounter=0;					//Reset the Channel Counter.
 							LED_PORT ^= (1<<PINB7);
 	}
-	else if(vuchrDMX_Break==1){					//If a break was detected..
-		if(temp>0) 
-		{
-			vDMXPacket[temp] = DMX_Data;
-		}
-		else {
-			vDMXPacket[vintDMX_ChCounter] = 0x00;
-			
-		}
-
+	else //if(vuchrDMX_Break==1)
+		{					//not break
+			if(temp>0) 
+			{
+				vDMXPacket[temp] = DMX_Data;
+			}
+ 			else if(temp==0) {
+ 				vDMXPacket[temp] = 0x00;
+ 			
+ 			}
 		
 		vintDMX_ChCounter++;					//Increase the Channel Counter
+
 	}
 }
 

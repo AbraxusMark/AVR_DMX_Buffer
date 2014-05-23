@@ -287,7 +287,7 @@ extern "C" {
 #elif BOARD == DUMMY_BOARD
 #  include "dummy/dummy_board.h"
 #else
-#  error No known Atmel board defined
+//#  error No known Atmel board defined
 #endif
 
 #if (defined EXT_BOARD)

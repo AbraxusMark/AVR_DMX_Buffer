@@ -8,6 +8,9 @@
 #ifndef USART_H_
 #define USART_H_
 
+void USART_Init(unsigned int);
+void USART_InitTX(unsigned int);
+
 void USART_Init(unsigned int baudrate)
 {
 	//UART RECEIVER
@@ -23,10 +26,8 @@ void USART_Init(unsigned int baudrate)
 	UCSR0C = (1<<UCSZ00)|(1<<UCSZ01)|(1<<USBS0); //8 bit async - USBS0 actually superfluous
 	
 	// Init TX - 8N2
-	//UCSR1B = (1<<TXEN1);		// |(1<<TXCIE0);  don't enable TX complete interupt
 	UCSR1C = 0x00;
-	UCSR1C = (1<<UCSZ10)|(1<<UCSZ11)|(1<<USBS1);
-	//UCSR1B &= ~(1<<TXEN1);		//TURN OFF TX AFTER INIT
+	UCSR1C = (1<<UCSZ10)|(1<<UCSZ11)|(1<<USBS1); //8 bit async
 	
 }
 
