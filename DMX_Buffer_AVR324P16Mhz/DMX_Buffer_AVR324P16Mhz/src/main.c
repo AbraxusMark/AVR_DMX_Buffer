@@ -17,40 +17,35 @@
 #include "usart.h"
 #include "avr/wdt.h"
 
-#define F_CPU 16000000L			//16Mhz crystal used for baud rate 0.0% error
+#define F_CPU 16000000L			//16Mhz crystal 
 #define DMX_FULL_Scale 3		//=(F_CPU)/(16*Baudrate).. For 16Mhz crystal and 250000bps => 3
-// #define DMX_BREAK_Scale 9
-#define LED_PORT	PORTB			//Port where the LED's are located .. Duh! :P
-#define LED_DDR		DDRB			//Data Direction Register of the LED's..
-#define DMX_ADDRESS_DDR		DDRA	//DDR where the "usual" Dipswitch is on for the channel setting
-#define DMX_ADDRESS_PORT	PORTA	//Port with the "usual" Dipswitch for the channel setting
-#define DMX_ADDRESS_PIN		PINA	//Pins where the "usual" Dipswitch for the channel setting
-#define DMXFRAME 512 
-#define NOP()   __asm__ __volatile__ ("nop" ::)
+
+#define DMX_ADDRESS_DDR		DDRA	//DDR - Dipswitch is on for the channel setting
+#define DMX_ADDRESS_PORT	PORTA	//Port - Dipswitch for the channel setting
+#define DMX_ADDRESS_PIN		PINA	//Pins - Dipswitch for the channel setting
+//#define DMXFRAME	512 
 #define DMXTXPIN	PIND3		
 
 
 //DMX Params
 
 #define BREAKTIME 170
-#define MABTIME 10
-#define STARTTIME 40
+#define MABTIME 8
+//#define STARTTIME 40
 #define MBSTIME 30
-#define MBBTIME 150
+#define MBBTIME 800
 
 //Functions
-void Init_Ports();	//Initialize IO Pins
-void TransmitDMXFrame();
+void Init_Ports(void);								//Initialise IO Pins
+int main(void);
+int positiveonly(int);
 
 //Variables
 
-volatile unsigned int  vintDMX_ChCounter;							//For counting the data packets
-volatile unsigned char vDMXPacket[513];								// 0 index is start ?
-volatile unsigned int vdiv;
-
-volatile unsigned char vucButtonStates = 0xFF;
-volatile uint8_t vintStartAddress = 0;
-unsigned char vuchrDMX_Break;
+volatile unsigned int  vintDMX_ChCounter;			//For counting the data packets
+volatile unsigned char vDMXPacket[514];			// 0 index is start frame, 2 x 513 for flip flop buffer
+volatile unsigned char vucharDIPStates[2];
+volatile uint16_t vintStartAddress = 0;
 
 //Main Loop
 int main(){
@@ -70,90 +65,95 @@ int main(){
 	////////////////////////////////			Main Loop
 	for(;;){
 		
-		vucButtonStates = PINA;
-		//PORTB = vucButtonStates;
-		vintStartAddress = (int)~vucButtonStates;
-				
-		_delay_us(BREAKTIME);						//BREAK
+		vucharDIPStates[0] = ~(DMX_ADDRESS_PIN);
+		vucharDIPStates[1] = !(PINB & (1 << PINB0));								//select out the 1st bit as for 256
+		ATOMIC_BLOCK(ATOMIC_FORCEON){												//16 bit access
+			vintStartAddress = vucharDIPStates[0] | (vucharDIPStates[1] << 8);
+		}
 		
-		// MARK AFTER BREAK
+		_delay_us(BREAKTIME);														//BREAK
+		
+																					// MARK AFTER BREAK
 		PORTD |= (1<<DMXTXPIN);
-										//PORTD |= (1<<PIND6);	//************ DEBUG cycle gen
+						//PORTD |= (1<<PIND6);	//************ DEBUG cycle gen
 		_delay_us(MABTIME);
-		//PORTD &= ~(1<<DMXTXPIN);
-		//_delay_us(STARTTIME);
+						//PORTD &= ~(1<<DMXTXPIN);
+						//_delay_us(STARTTIME);
 		PORTD |= (1<<DMXTXPIN);
-		// PACKET
+		
+																					// PACKET
 		UCSR1A = (1<<TXC1);
 		UCSR1B |= (1<<TXEN1);
+
+			for(i=0;i<513;i++){		
+				while(!(UCSR1A & (1 << UDRE1))) ;
+				UDR1 = vDMXPacket[i];	
+											//_delay_us(MBSTIME);		//SLOT delay
+			}			
 		
-		for(i=0;i<513;i++){		
-			while(!(UCSR1A & (1 << UDRE1))) ;
-			UDR1 = vDMXPacket[i];	
-			//_delay_us(MBSTIME);		//SLOT delay
-		}	
+
 		while (!(UCSR1A & (1<<TXC1)));
-			UCSR1B &= ~(1<<TXEN1);	//uart tx off for rest of timings
-		//MARK BEFORE BREAK	
+		UCSR1B &= ~(1<<TXEN1);														//uart tx off for rest of timings
+	
+																					//MARK BEFORE BREAK	
 		PORTD |= (1<<DMXTXPIN);
 		_delay_us(MBBTIME);
 		PORTD &= ~(1<<DMXTXPIN);
 										//PORTD &= ~(1<<PIND6);	//************ DEBUG cycle gen
-		PORTB ^= (1<<PINB2);						//LED status
+		PORTB ^= (1<<PINB2);														//LED status blink
 			
-
 	}
-	
 	return 0;
 }
 
 //Functions
-void Init_Ports(){					
+void Init_Ports(void){					
 	
-	LED_DDR = 0xFF;					//DDR != 255 => input
-	PORTB = 0xFF;					//pullups
-	DMX_ADDRESS_DDR=0; 				//Input
+	
+	DMX_ADDRESS_DDR=0; 				//0-7 DIP Input
 	DMX_ADDRESS_PORT=0xFF;			//pull ups
-// 	PCICR |= (1 << PCIE0);			// set PCIE0 to enable PCMSK0 scan
-// 	PCMSK0 = 0xFF;					// set PORT to trigger an interrupt on state change 
 	DDRD |= (1<<DMXTXPIN);			//USART PIN TX set output
 	PORTD &= ~(1<<DMXTXPIN);		// ^ pin is low for 0 / idle
 	//DDRD |= (1<<DDRD6);				//TEST PIN FOR SCOPE
-
-	DDRB != ~(1<<PINB1);			// DIP 10
-	DDRB != ~(1<<PINB2);			// DIP 9
 	
+	//set B0 & B1 for dip input, B2 & B3 for LED out
 	
-	
+	DDRB = 0b11111100; 	
+	PORTB = 0xFF;				// PIN B0 & B1 Pullup, and heck why not all on at start.
+						
 }
 
 //Interrupts
 ISR(USART0_RX_vect){							//UART 0 ISR
 
-	int temp = vintDMX_ChCounter-vintStartAddress;
+	
 	unsigned char UART_Status = UCSR0A;						//Read the status from the UCSRA register
 	unsigned char DMX_Data = UDR0;							//Read data from UDR data register
 
 	if (UART_Status & (1<<FE0)){				//If we detect a frame error=> RX_line low for longer then 8 bits (Break condition)
-		//vuchrDMX_Break=1;						//We have a break.
-		vintDMX_ChCounter=0;					//Reset the Channel Counter.
-		LED_PORT ^= (1<<PINB3);
-	}
-	else //if(vuchrDMX_Break==1){					//If a break was detected..
-		{
-			
 		
-		if(temp>0) 
-		{
+		vintDMX_ChCounter=0;					//Reset the Channel Counter.
+		PORTB ^= (1<<PINB3);
+	}
+	else {
+	int temp =  positiveonly(vintDMX_ChCounter-vintStartAddress);
+		if(temp>0){
 			vDMXPacket[temp] = DMX_Data;
 		}
-		else {
+		else if (temp == 0 ){					//recreate start bit
 			vDMXPacket[temp] = 0x00;
-			
 		}
-
 		
 		vintDMX_ChCounter++;					//Increase the Channel Counter
 	}
+
+
 }
 
+int positiveonly(int number)
+{
+	
+	if(number >= 0) return number;
+	else return 0;
+	
+}

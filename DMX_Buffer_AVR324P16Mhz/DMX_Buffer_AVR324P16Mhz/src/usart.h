@@ -8,6 +8,9 @@
 #ifndef USART_H_
 #define USART_H_
 
+void USART_Init(unsigned int );
+void USART_InitTX(unsigned int );
+
 void USART_Init(unsigned int baudrate)
 {
 	//UART RECEIVER
@@ -37,16 +40,6 @@ void USART_InitTX(unsigned int baudrate)
 	
 	UBRR1H = (unsigned char)(baudrate>>8);
 	UBRR1L = (unsigned char)baudrate;
-	
-// 	if (baudrate == 3) //full scale
-// 	{
-// 		UCSR1C &= ~(1<<UPM11); //no parity
-// 	}
-// 	else{
-// 		UCSR1C |= (1<<UPM11); //even parity on break?
-// 	}	
 }
-
-
 
 #endif /* USART_H_ */
